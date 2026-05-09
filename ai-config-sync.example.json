@@ -31,20 +31,24 @@
     ]
   },
   "project_local": {
+    "applies_to": "These paths are relative to whichever git repository the agent is editing. Leave them as conventions, change them if your projects use different local directories, or set the arrays to [] to disable project-local enforcement.",
     "skill_roots": [
       {
+        "name": "project-local skills",
         "claude": ".claude/skills",
         "codex": ".codex/skills"
       }
     ],
     "hook_roots": [
       {
+        "name": "project-local hooks",
         "claude": ".claude/hooks",
         "codex": ".codex/hooks"
       }
     ],
     "registration_pairs": [
       {
+        "name": "project-local hook registrations",
         "claude": ".claude/settings.json",
         "codex": ".codex/hooks.json"
       }
@@ -58,4 +62,3 @@
     "**/cache/**"
   ]
 }
-

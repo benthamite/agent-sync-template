@@ -57,6 +57,18 @@ Then edit `ai-config-sync.json` so it points at your real files:
 
 Those paths are examples. Use whatever paths your setup already uses.
 
+The `global` section points to specific files and directories on your machine. Fill those in with your actual global Claude and Codex configuration paths.
+
+The `project_local` section is different. It defines conventions relative to whatever git repository the agent is currently editing. The default means:
+
+```text
+PROJECT/.claude/skills/      <-> PROJECT/.codex/skills/
+PROJECT/.claude/hooks/       <-> PROJECT/.codex/hooks/
+PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
+```
+
+You do not need to create those directories in every project. They matter only in projects that already have project-local agent files, or in projects where you decide to add them. If an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If your projects use different local paths, change the `project_local` paths. If you do not want project-local enforcement, set those arrays to `[]`.
+
 ## Port Your Existing Files
 
 After the paths are configured, port your existing skills and hooks so both tools have counterparts:
@@ -110,6 +122,8 @@ The reminder hooks run after edits. The commit guard runs before `git commit` an
 .claude/hooks/       <-> .codex/hooks/
 .claude/settings.json <-> .codex/hooks.json
 ```
+
+Project-local paths are resolved inside the git repository being committed. They are not global paths and they are not scanned across your whole filesystem.
 
 ## Commands
 
