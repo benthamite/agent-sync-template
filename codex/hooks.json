@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agent-sync-template/codex/hooks/require-ai-config-sync.sh",
+            "timeout": 10,
+            "statusMessage": "Checking Claude/Codex config sync"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agent-sync-template/codex/hooks/remind-ai-config-sync.sh",
+            "timeout": 5,
+            "statusMessage": "Checking Claude/Codex sync reminder"
+          }
+        ]
+      }
+    ]
+  }
+}

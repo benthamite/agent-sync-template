@@ -1,0 +1,466 @@
+#!/usr/bin/env python3
+"""Audit and guard paired Claude Code / Codex configuration."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(os.environ.get("AGENT_SYNC_ROOT", Path(__file__).resolve().parents[1])).resolve()
+HOME = Path.home()
+MANIFEST = ROOT / "ai-config-sync.json"
+
+
+def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def git_root(start: Path) -> Path | None:
+    proc = subprocess.run(
+        ["git", "-C", str(start), "rev-parse", "--show-toplevel"],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    if proc.returncode != 0:
+        return None
+    return Path(proc.stdout.strip()).resolve()
+
+
+def load_manifest() -> dict:
+    try:
+        return json.loads(MANIFEST.read_text())
+    except Exception as exc:
+        raise RuntimeError(f"Could not read {MANIFEST}: {exc}") from exc
+
+
+def rel(path: Path, base: Path = ROOT) -> str:
+    return path.resolve().relative_to(base.resolve()).as_posix()
+
+
+def read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def normalize_frontmatter(text: str) -> str:
+    if not text.startswith("---\n"):
+        return text
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return text
+    front = text[4:end].splitlines()
+    body = text[end + 5 :]
+    ignored = re.compile(r"^(allowed-tools|argument-hint|model|tools):\s*", re.I)
+    front = [line for line in front if not ignored.match(line)]
+    return "---\n" + "\n".join(front).strip() + "\n---\n" + body
+
+
+def normalize_text(text: str) -> str:
+    text = text.replace("\r\n", "\n")
+    text = normalize_frontmatter(text)
+    text = text.replace("# Global Claude Code conventions", "# Global agent conventions")
+    text = text.replace("# Global Codex conventions", "# Global agent conventions")
+    text = text.replace("Claude Code and Codex", "Claude/Codex")
+    text = text.replace("Claude and Codex", "Claude/Codex")
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    return text.strip() + "\n"
+
+
+def normalize_hook(text: str) -> str:
+    text = normalize_text(text)
+    text = text.replace("remind-claude", "remind-agent")
+    text = text.replace("remind-codex", "remind-agent")
+    return text
+
+
+def compare_files(left: Path, right: Path, normalizer=normalize_text) -> list[str]:
+    problems: list[str] = []
+    if not left.exists():
+        problems.append(f"Missing {left}")
+    if not right.exists():
+        problems.append(f"Missing {right}")
+    if problems:
+        return problems
+    if normalizer(read_text(left)) != normalizer(read_text(right)):
+        problems.append(f"Drift between {rel(left)} and {rel(right)}")
+    return problems
+
+
+def compare_skill_dirs(left: Path, right: Path) -> list[str]:
+    problems = compare_files(left / "SKILL.md", right / "SKILL.md", normalize_text)
+    left_files = {
+        path.relative_to(left).as_posix()
+        for path in left.rglob("*")
+        if path.is_file() and path.name != "SKILL.md"
+    }
+    right_files = {
+        path.relative_to(right).as_posix()
+        for path in right.rglob("*")
+        if path.is_file() and path.name != "SKILL.md"
+    }
+    if left_files != right_files:
+        problems.append(
+            f"Auxiliary skill files differ between {rel(left)} and {rel(right)}"
+        )
+    for name in sorted(left_files & right_files):
+        problems.extend(compare_files(left / name, right / name, normalize_text))
+    return problems
+
+
+def audit_repo() -> list[str]:
+    problems: list[str] = []
+    manifest = load_manifest()
+
+    for item in manifest.get("instructions", []):
+        problems.extend(
+            compare_files(ROOT / item["claude"], ROOT / item["codex"], normalize_text)
+        )
+
+    for item in manifest.get("skills", []):
+        problems.extend(compare_skill_dirs(ROOT / item["claude"], ROOT / item["codex"]))
+
+    for item in manifest.get("hooks", []):
+        problems.extend(
+            compare_files(ROOT / item["claude"], ROOT / item["codex"], normalize_hook)
+        )
+
+    hooks_json = ROOT / "codex/hooks.json"
+    try:
+        hooks = json.loads(read_text(hooks_json))
+    except Exception as exc:
+        problems.append(f"Invalid {rel(hooks_json)}: {exc}")
+    else:
+        encoded = json.dumps(hooks)
+        for needle in (
+            "~/.agent-sync-template/codex/hooks/require-ai-config-sync.sh",
+            "~/.agent-sync-template/codex/hooks/remind-ai-config-sync.sh",
+        ):
+            if needle not in encoded:
+                problems.append(f"{rel(hooks_json)} does not register {needle}")
+
+    config = ROOT / "codex/config.toml"
+    text = read_text(config) if config.exists() else ""
+    for needle in ("project_doc_fallback_filenames", "hooks.json", "rules/default.rules"):
+        if needle not in text:
+            problems.append(f"{rel(config)} is missing {needle}")
+
+    install = ROOT / "install.sh"
+    if install.exists():
+        install_text = read_text(install)
+        for needle in (
+            "~/.agent-sync-template/claude/hooks/require-ai-config-sync.sh",
+            "~/.agent-sync-template/claude/hooks/remind-ai-config-sync.sh",
+        ):
+            if needle not in install_text:
+                problems.append(f"install.sh does not register {needle}")
+    else:
+        problems.append("Missing install.sh")
+
+    return problems
+
+
+def symlink_problem(dest: Path, source: Path) -> str | None:
+    if not dest.exists() and not dest.is_symlink():
+        return f"Missing live path {dest}"
+    if not dest.is_symlink():
+        return f"{dest} is not a symlink"
+    if dest.resolve() != source.resolve():
+        return f"{dest} points to {dest.resolve()}, expected {source.resolve()}"
+    return None
+
+
+def audit_live() -> list[str]:
+    problems = audit_repo()
+    links = [
+        (HOME / ".agent-sync-template", ROOT),
+        (HOME / ".claude/CLAUDE.md", ROOT / "claude/CLAUDE.md"),
+        (HOME / ".claude/skills", ROOT / "claude/skills"),
+        (HOME / ".codex/AGENTS.md", ROOT / "codex/AGENTS.md"),
+        (HOME / ".codex/config.toml", ROOT / "codex/config.toml"),
+        (HOME / ".codex/hooks.json", ROOT / "codex/hooks.json"),
+        (HOME / ".codex/rules", ROOT / "codex/rules"),
+        (HOME / ".codex/skills", ROOT / "codex/skills"),
+    ]
+    for dest, source in links:
+        problem = symlink_problem(dest, source)
+        if problem:
+            problems.append(problem)
+
+    settings = HOME / ".claude/settings.json"
+    if settings.exists():
+        try:
+            settings_text = read_text(settings)
+            json.loads(settings_text)
+        except Exception as exc:
+            problems.append(f"Invalid {settings}: {exc}")
+            settings_text = ""
+        for needle in (
+            "~/.agent-sync-template/claude/hooks/require-ai-config-sync.sh",
+            "~/.agent-sync-template/claude/hooks/remind-ai-config-sync.sh",
+        ):
+            if needle not in settings_text:
+                problems.append(f"{settings} does not register {needle}")
+    else:
+        problems.append(f"Missing {settings}")
+
+    return problems
+
+
+def staged_paths(repo: Path) -> set[str]:
+    proc = run_git(repo, "diff", "--cached", "--name-only", "--diff-filter=ACMR")
+    if proc.returncode != 0:
+        return set()
+    return {line for line in proc.stdout.splitlines() if line}
+
+
+def changed_paths(repo: Path) -> set[str]:
+    paths: set[str] = set()
+    for args in (
+        ("diff", "--name-only", "--diff-filter=ACMR"),
+        ("diff", "--cached", "--name-only", "--diff-filter=ACMR"),
+        ("ls-files", "--others", "--exclude-standard"),
+    ):
+        proc = run_git(repo, *args)
+        if proc.returncode == 0:
+            paths.update(line for line in proc.stdout.splitlines() if line)
+    return paths
+
+
+def global_counterparts(path: str) -> list[str]:
+    pairs = {
+        "claude/CLAUDE.md": ["codex/AGENTS.md"],
+        "codex/AGENTS.md": ["claude/CLAUDE.md"],
+    }
+    if path in pairs:
+        return pairs[path]
+
+    for left, right in (("claude/skills/", "codex/skills/"), ("claude/hooks/", "codex/hooks/")):
+        if path.startswith(left):
+            return [right + path[len(left) :]]
+        if path.startswith(right):
+            return [left + path[len(right) :]]
+    return []
+
+
+def project_counterparts(path: str) -> list[str]:
+    pairs = {
+        ".claude/settings.json": [".codex/hooks.json"],
+        ".codex/hooks.json": [".claude/settings.json"],
+        ".claude/CLAUDE.md": [".codex/AGENTS.md"],
+        ".codex/AGENTS.md": [".claude/CLAUDE.md"],
+        "CLAUDE.md": ["AGENTS.md"],
+        "AGENTS.md": ["CLAUDE.md"],
+    }
+    if path in pairs:
+        return pairs[path]
+
+    for left, right in ((".claude/skills/", ".codex/skills/"), (".claude/hooks/", ".codex/hooks/")):
+        if path.startswith(left):
+            return [right + path[len(left) :]]
+        if path.startswith(right):
+            return [left + path[len(right) :]]
+    return []
+
+
+def counterparts(repo: Path, path: str) -> list[str]:
+    if repo.resolve() == ROOT:
+        return global_counterparts(path)
+    return project_counterparts(path)
+
+
+def one_sided_messages(repo: Path, paths: set[str]) -> list[str]:
+    messages: list[str] = []
+    for path in sorted(paths):
+        required = counterparts(repo, path)
+        missing = [other for other in required if other not in paths]
+        if missing:
+            joined = ", ".join(missing)
+            messages.append(f"{path} changed without its Claude/Codex counterpart: {joined}")
+    return messages
+
+
+def command_text(args: list[str]) -> str:
+    if args:
+        return " ".join(args)
+    try:
+        raw = sys.stdin.read()
+    except Exception:
+        raw = ""
+    if not raw.strip():
+        return ""
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return raw
+    tool_input = payload.get("tool_input") or payload.get("toolInput") or {}
+    if isinstance(tool_input, dict) and isinstance(tool_input.get("command"), str):
+        return tool_input["command"]
+    if isinstance(payload.get("command"), str):
+        return payload["command"]
+    return raw
+
+
+def is_git_commit_command(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    for i, token in enumerate(tokens):
+        if token == "git":
+            tail = tokens[i + 1 :]
+            while len(tail) >= 2 and tail[0] == "-C":
+                tail = tail[2:]
+            return bool(tail and tail[0] == "commit")
+    return False
+
+
+def repo_from_git_command(command: str) -> Path | None:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    cwd = Path.cwd()
+    for i, token in enumerate(tokens):
+        if token != "git":
+            continue
+        tail = tokens[i + 1 :]
+        while tail:
+            if tail[0] == "-C" and len(tail) >= 2:
+                target = Path(tail[1])
+                cwd = target if target.is_absolute() else cwd / target
+                tail = tail[2:]
+                continue
+            if tail[0] in {"-c", "--config-env"} and len(tail) >= 2:
+                tail = tail[2:]
+                continue
+            if tail[0].startswith("-"):
+                tail = tail[1:]
+                continue
+            break
+        return git_root(cwd)
+    return git_root(Path.cwd())
+
+
+def guard_commit(args: list[str]) -> int:
+    command = command_text(args)
+    if command and not is_git_commit_command(command):
+        return 0
+
+    repo = repo_from_git_command(command) if command else git_root(Path.cwd())
+    if repo is None:
+        return 0
+    paths = staged_paths(repo)
+    messages = one_sided_messages(repo, paths)
+    if not messages:
+        return 0
+
+    print("Claude/Codex sync guard blocked this commit:", file=sys.stderr)
+    for message in messages:
+        print(f"- {message}", file=sys.stderr)
+    print("Update the counterpart or unstage the one-sided change.", file=sys.stderr)
+    return 2
+
+
+def reminder_payload_paths(payload: dict) -> list[str]:
+    paths: list[str] = []
+
+    def visit(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in {"file_path", "path"} and isinstance(child, str):
+                    paths.append(child)
+                else:
+                    visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(payload)
+    return paths
+
+
+def remind(agent: str) -> int:
+    repo = git_root(Path.cwd())
+    if repo is None:
+        if agent == "codex":
+            print(json.dumps({"hookSpecificOutput": {"additionalContext": ""}}))
+        return 0
+
+    raw = sys.stdin.read()
+    explicit: set[str] = set()
+    if raw.strip():
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            payload = {}
+        for value in reminder_payload_paths(payload):
+            path = Path(value)
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            try:
+                explicit.add(path.resolve().relative_to(repo).as_posix())
+            except ValueError:
+                pass
+
+    paths = explicit or changed_paths(repo)
+    messages = one_sided_messages(repo, paths)
+    text = ""
+    if messages:
+        text = "Claude/Codex sync reminder:\n" + "\n".join(f"- {m}" for m in messages)
+
+    if agent == "codex":
+        print(json.dumps({"hookSpecificOutput": {"additionalContext": text}}))
+    elif text:
+        print(text)
+    return 0
+
+
+def print_problems(problems: list[str], label: str) -> int:
+    if not problems:
+        print(f"{label}: ok")
+        return 0
+    print(f"{label}: found {len(problems)} problem(s)", file=sys.stderr)
+    for problem in problems:
+        print(f"- {problem}", file=sys.stderr)
+    return 1
+
+
+def main(argv: list[str]) -> int:
+    command = argv[1] if len(argv) > 1 else "audit"
+    args = argv[2:]
+    try:
+        if command == "audit":
+            return print_problems(audit_repo(), "audit")
+        if command == "audit-live":
+            return print_problems(audit_live(), "audit-live")
+        if command == "guard-commit":
+            return guard_commit(args)
+        if command == "remind-claude":
+            return remind("claude")
+        if command == "remind-codex":
+            return remind("codex")
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    print(
+        "usage: ai-config-sync [audit|audit-live|guard-commit|remind-claude|remind-codex]",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

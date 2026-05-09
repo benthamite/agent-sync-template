@@ -1,0 +1,3 @@
+# Default Codex Rules
+
+Keep Claude Code and Codex configuration changes synchronized. When editing a paired global or project-local agent artifact, update the counterpart before committing.
