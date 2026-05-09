@@ -5,6 +5,8 @@ Use this prompt when you want Claude Code or Codex to adapt the toolkit to your 
 ```text
 You are setting up a Claude Code / Codex synchronization toolkit.
 
+If this repository is not already cloned locally, clone https://github.com/benthamite/agent-sync-template.git first and work from that clone.
+
 First read README.md, ai-config-sync.example.json, smoke-test.sh, and bin/ai-config-sync. Run ./smoke-test.sh before touching any live Claude or Codex files.
 
 Do not impose a new directory layout. Do not create symlinks unless I explicitly ask for them. Use my existing Claude and Codex file locations.

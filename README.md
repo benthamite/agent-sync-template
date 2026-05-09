@@ -6,30 +6,34 @@ The setup agent infers where your Claude files live and where your Codex files l
 
 It does not install sample skills. It does not require symlinks. It does not assume that your configuration lives inside this repository.
 
-## Try It
+## Quick Start
 
-Run the smoke test first:
+Give Claude Code or Codex this prompt:
 
-```sh
-./smoke-test.sh
+```text
+Set up Claude Code / Codex synchronization using https://github.com/benthamite/agent-sync-template.
+
+Clone the repository to a sensible local location if it is not already available. Run its smoke test before touching my live Claude or Codex configuration. Then follow BOOTSTRAP.md.
+
+Infer my existing Claude and Codex paths yourself. Port missing skill and hook counterparts. Register the toolkit's reminder and commit-guard hooks in my existing Claude and Codex hook configuration. Ask me only if you cannot infer a path, there are multiple plausible choices with different consequences, or you would need to merge/overwrite risky mutable settings.
 ```
 
-The smoke test creates temporary Claude/Codex instruction files, skills, hooks, and project-local files. It then verifies that one-sided edits are blocked and paired edits are accepted.
+The agent should do the cloning, test run, path inference, porting, hook registration, and audit. The user should only need to review the final summary and answer questions the agent cannot resolve from local context.
 
 ## Set It Up With An Agent
 
-After the smoke test passes, open this repository in Claude Code or Codex and ask the agent to follow `BOOTSTRAP.md`.
-
 The agent should:
 
-1. Inspect your existing Claude and Codex configuration.
-2. Create `ai-config-sync.json` from `ai-config-sync.example.json`.
-3. Fill in the real global paths it finds.
-4. Choose the appropriate `project_local` rule.
-5. Inventory existing skills and hooks.
-6. Port missing counterparts.
-7. Register the reminder and commit-guard hooks.
-8. Run the audit.
+1. Clone this repository if needed.
+2. Run `./smoke-test.sh`.
+3. Inspect your existing Claude and Codex configuration.
+4. Create `ai-config-sync.json` from `ai-config-sync.example.json`.
+5. Fill in the real global paths it finds.
+6. Choose the appropriate `project_local` rule.
+7. Inventory existing skills and hooks.
+8. Port missing counterparts.
+9. Register the reminder and commit-guard hooks.
+10. Run the audit.
 
 The agent should ask you only when it cannot infer a path, cannot determine which convention you want, or would need to overwrite/merge a sensitive mutable settings file.
 
