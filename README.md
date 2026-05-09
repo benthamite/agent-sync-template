@@ -18,10 +18,6 @@ Clone the repository to a sensible local location if it is not already available
 
 `BOOTSTRAP.md` contains the operational instructions. The user should not have to clone the repo, run the test, fill in paths, port files, or register hooks manually.
 
-## Setup Checklist
-
-`BOOTSTRAP.md` is the authoritative setup checklist. Keep the quick-start prompt short and put operational details there, so the user can hand one instruction to an agent and let the agent do the work.
-
 ## What The Agent Writes
 
 The generated `ai-config-sync.json` maps your real Claude and Codex files. It will look roughly like this, but with paths inferred from your machine:
