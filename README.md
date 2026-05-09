@@ -13,29 +13,14 @@ Give Claude Code or Codex this prompt:
 ```text
 Set up Claude Code / Codex synchronization using https://github.com/benthamite/agent-sync-template.
 
-Clone the repository to a sensible local location if it is not already available. Run its smoke test before touching my live Claude or Codex configuration. Then follow BOOTSTRAP.md.
-
-Infer my existing Claude and Codex paths yourself. Port missing skill and hook counterparts. Register the toolkit's reminder and commit-guard hooks in my existing Claude and Codex hook configuration. Ask me only if you cannot infer a path, there are multiple plausible choices with different consequences, or you would need to merge/overwrite risky mutable settings.
+Clone the repository to a sensible local location if it is not already available. Run its smoke test before touching my live Claude or Codex configuration. Then follow BOOTSTRAP.md exactly.
 ```
 
-The agent should do the cloning, test run, path inference, porting, hook registration, and audit. The user should only need to review the final summary and answer questions the agent cannot resolve from local context.
+`BOOTSTRAP.md` contains the operational instructions. The user should not have to clone the repo, run the test, fill in paths, port files, or register hooks manually.
 
-## Set It Up With An Agent
+## Setup Checklist
 
-The agent should:
-
-1. Clone this repository if needed.
-2. Run `./smoke-test.sh`.
-3. Inspect your existing Claude and Codex configuration.
-4. Create `ai-config-sync.json` from `ai-config-sync.example.json`.
-5. Fill in the real global paths it finds.
-6. Choose the appropriate `project_local` rule.
-7. Inventory existing skills and hooks.
-8. Port missing counterparts.
-9. Register the reminder and commit-guard hooks.
-10. Run the audit.
-
-The agent should ask you only when it cannot infer a path, cannot determine which convention you want, or would need to overwrite/merge a sensitive mutable settings file.
+`BOOTSTRAP.md` is the authoritative setup checklist. Keep the quick-start prompt short and put operational details there, so the user can hand one instruction to an agent and let the agent do the work.
 
 ## What The Agent Writes
 
