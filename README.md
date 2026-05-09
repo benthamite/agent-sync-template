@@ -59,7 +59,16 @@ Those paths are examples. Use whatever paths your setup already uses.
 
 The `global` section points to specific files and directories on your machine. Fill those in with your actual global Claude and Codex configuration paths.
 
-The `project_local` section is optional. It does not require you to create `.claude/` or `.codex/` directories in existing projects. It defines what to do only when a project already has project-local agent files, or when you deliberately add them to a particular project.
+For `project_local`, choose one of these options:
+
+```text
+Keep the defaults   if project-local files use .claude/ and .codex/,
+                    or if you do not currently use project-local files.
+Edit the paths      if your project-local files use different directories.
+Set arrays to []    if you never want project-local checks.
+```
+
+Keeping the defaults does not create any directories and does not require you to change existing projects. It just says what the guard should do if a future edit or commit touches one of those paths inside the current git repository.
 
 The default convention means:
 
@@ -70,8 +79,6 @@ PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
 ```
 
 That means: if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no `.claude/` or `.codex/` directory, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
-
-If your projects use different local paths, change the `project_local` paths. If you do not want project-local enforcement at all, set those arrays to `[]`.
 
 ## Port Your Existing Files
 

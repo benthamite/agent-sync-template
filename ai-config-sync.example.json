@@ -31,7 +31,7 @@
     ]
   },
   "project_local": {
-    "applies_to": "Optional. These paths are relative to the git repository being edited. They do not require creating directories in existing projects. They apply only when a staged/edited file is already under one of these paths, or when you deliberately add project-local agent files to a project. Change them if your projects use different local paths, or set the arrays to [] to disable project-local enforcement.",
+    "what_to_do": "Choose one: leave this unchanged if your project-local files use .claude/ and .codex/ or if you do not use project-local files; edit these paths if your project-local files use different directories; set skill_roots, hook_roots, and registration_pairs to [] if you never want project-local checks. This section is a conditional rule for the current git repo, not a request to create directories.",
     "skill_roots": [
       {
         "name": "project-local skills",
