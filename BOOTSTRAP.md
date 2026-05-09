@@ -1,15 +1,24 @@
 # Bootstrap Prompt
 
-Use this prompt when you want Claude Code or Codex to adapt the starter kit to a new machine.
+Use this prompt when you want Claude Code or Codex to adapt the toolkit to your existing setup.
 
 ```text
-You are setting up my Claude Code and Codex synchronization repository.
+You are setting up a Claude Code / Codex synchronization toolkit.
 
-First read README.md, ai-config-sync.json, install.sh, smoke-test.sh, and bin/ai-config-sync. Then run ./smoke-test.sh before touching my live ~/.claude or ~/.codex directories.
+First read README.md, ai-config-sync.example.json, smoke-test.sh, and bin/ai-config-sync. Run ./smoke-test.sh before touching any live Claude or Codex files.
 
-The goal is to keep Claude Code and Codex on equal footing. Do not treat either tool as the source and the other as a derived port. Maintain paired artifacts where the tools expose the same capability: global instructions, skills, hooks, and project-local counterparts.
+Do not impose a new directory layout. Do not create symlinks unless I explicitly ask for them. Use my existing Claude and Codex file locations.
 
-Before changing live files under ~/.claude or ~/.codex, inspect what is already there. Do not overwrite real non-symlink files without explaining the conflict and asking me. If a file is mutable tool state, preserve it in place and merge the required configuration instead of symlinking it.
+Create ai-config-sync.json from ai-config-sync.example.json and fill it with my real paths: global instruction files, skill roots, hook roots, and hook registration files. If a path is ambiguous, inspect the filesystem and existing tool configuration before asking me.
 
-Adapt claude/CLAUDE.md and codex/AGENTS.md to my preferred agent rules. Adapt paired skills and hooks as needed. Keep ai-config-sync.json accurate. When you finish, run bin/ai-config-sync audit and ./smoke-test.sh, then explain what changed and what remains for me to review.
+Inventory my existing Claude and Codex skills and hooks. For each skill or hook that exists on only one side, create the missing counterpart in the configured location, adapting frontmatter, hook payload parsing, and registration syntax for the target tool. Do not treat either tool as the source of truth; the goal is paired behavior.
+
+Update the relevant Claude and Codex hook registrations so the reminder hooks and commit guard run from this toolkit. Preserve mutable settings files in place and merge changes instead of overwriting unrelated settings.
+
+When finished, run:
+
+./smoke-test.sh
+bin/ai-config-sync audit
+
+Then summarize which paths are mapped, which skills/hooks were ported, which items intentionally diverge, and what I should review manually.
 ```

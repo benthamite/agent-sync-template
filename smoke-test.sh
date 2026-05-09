@@ -23,24 +23,123 @@ export GIT_AUTHOR_EMAIL="agent-sync@example.invalid"
 export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
 export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
 
-AGENT_SYNC_ROOT="$ROOT" "$ROOT/bin/ai-config-sync" audit
+CONFIG_REPO="$TMP/config"
+mkdir -p \
+  "$CONFIG_REPO/claude/skills/alpha" \
+  "$CONFIG_REPO/codex/skills/alpha" \
+  "$CONFIG_REPO/claude/hooks" \
+  "$CONFIG_REPO/codex/hooks"
 
-COPY="$TMP/template"
-mkdir -p -- "$COPY"
-rsync -a --exclude '.git' --exclude 'tmp' "$ROOT/" "$COPY/"
-git -C "$COPY" init -q
-git -C "$COPY" add .
-git -C "$COPY" commit -q -m baseline
+cat > "$CONFIG_REPO/claude/CLAUDE.md" <<'EOF'
+# Global Claude instructions
 
-printf '\nSmoke-test global edit.\n' >> "$COPY/claude/skills/example/SKILL.md"
-git -C "$COPY" add claude/skills/example/SKILL.md
-if (cd "$COPY" && AGENT_SYNC_ROOT="$COPY" "$COPY/bin/ai-config-sync" guard-commit "git commit -m one-sided") >/dev/null 2>&1; then
+- Keep paired agent files synchronized.
+EOF
+
+cat > "$CONFIG_REPO/codex/AGENTS.md" <<'EOF'
+# Global Codex instructions
+
+- Keep paired agent files synchronized.
+EOF
+
+cat > "$CONFIG_REPO/claude/skills/alpha/SKILL.md" <<'EOF'
+---
+name: alpha
+description: Smoke-test skill.
+allowed-tools: Bash
+---
+
+# Alpha
+
+Do the alpha workflow.
+EOF
+
+cat > "$CONFIG_REPO/codex/skills/alpha/SKILL.md" <<'EOF'
+---
+name: alpha
+description: Smoke-test skill.
+---
+
+# Alpha
+
+Do the alpha workflow.
+EOF
+
+cat > "$CONFIG_REPO/claude/hooks/sync.sh" <<'EOF'
+#!/usr/bin/env bash
+echo sync
+EOF
+
+cat > "$CONFIG_REPO/codex/hooks/sync.sh" <<'EOF'
+#!/usr/bin/env bash
+echo sync
+EOF
+
+cat > "$CONFIG_REPO/ai-config-sync.json" <<EOF
+{
+  "global": {
+    "file_pairs": [
+      {
+        "name": "global instructions",
+        "claude": "$CONFIG_REPO/claude/CLAUDE.md",
+        "codex": "$CONFIG_REPO/codex/AGENTS.md",
+        "normalizer": "instructions"
+      }
+    ],
+    "skill_roots": [
+      {
+        "name": "global skills",
+        "claude": "$CONFIG_REPO/claude/skills",
+        "codex": "$CONFIG_REPO/codex/skills"
+      }
+    ],
+    "hook_roots": [
+      {
+        "name": "global hooks",
+        "claude": "$CONFIG_REPO/claude/hooks",
+        "codex": "$CONFIG_REPO/codex/hooks"
+      }
+    ]
+  },
+  "project_local": {
+    "skill_roots": [
+      {
+        "claude": ".claude/skills",
+        "codex": ".codex/skills"
+      }
+    ],
+    "hook_roots": [
+      {
+        "claude": ".claude/hooks",
+        "codex": ".codex/hooks"
+      }
+    ],
+    "registration_pairs": [
+      {
+        "claude": ".claude/settings.json",
+        "codex": ".codex/hooks.json"
+      }
+    ]
+  },
+  "ignore": []
+}
+EOF
+
+git -C "$CONFIG_REPO" init -q
+git -C "$CONFIG_REPO" add .
+git -C "$CONFIG_REPO" commit -q -m baseline
+
+"$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" audit
+
+printf '\nOne-sided global edit.\n' >> "$CONFIG_REPO/claude/skills/alpha/SKILL.md"
+git -C "$CONFIG_REPO" add claude/skills/alpha/SKILL.md
+if (cd "$CONFIG_REPO" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m one-sided") >/dev/null 2>&1; then
   fail "one-sided global skill edit was not blocked"
 fi
 
-printf '\nSmoke-test global edit.\n' >> "$COPY/codex/skills/example/SKILL.md"
-git -C "$COPY" add codex/skills/example/SKILL.md
-(cd "$COPY" && AGENT_SYNC_ROOT="$COPY" "$COPY/bin/ai-config-sync" guard-commit "git commit -m paired") >/dev/null
+printf '\nOne-sided global edit.\n' >> "$CONFIG_REPO/codex/skills/alpha/SKILL.md"
+git -C "$CONFIG_REPO" add codex/skills/alpha/SKILL.md
+(cd "$CONFIG_REPO" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired") >/dev/null
 
 PROJECT="$TMP/project"
 mkdir -p -- "$PROJECT/.claude/skills/local" "$PROJECT/.codex/skills/local"
@@ -52,25 +151,25 @@ git -C "$PROJECT" commit -q -m baseline
 
 printf '\nOne-sided local edit.\n' >> "$PROJECT/.codex/skills/local/SKILL.md"
 git -C "$PROJECT" add .codex/skills/local/SKILL.md
-if (cd "$PROJECT" && AGENT_SYNC_ROOT="$ROOT" "$ROOT/bin/ai-config-sync" guard-commit "git commit -m one-sided") >/dev/null 2>&1; then
+if (cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m one-sided") >/dev/null 2>&1; then
   fail "one-sided project-local skill edit was not blocked"
 fi
-if AGENT_SYNC_ROOT="$ROOT" "$ROOT/bin/ai-config-sync" guard-commit "git -C $PROJECT commit -m one-sided" >/dev/null 2>&1; then
+if "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git -C $PROJECT commit -m one-sided" >/dev/null 2>&1; then
   fail "one-sided project-local skill edit was not blocked through git -C"
 fi
 
 printf '\nOne-sided local edit.\n' >> "$PROJECT/.claude/skills/local/SKILL.md"
 git -C "$PROJECT" add .claude/skills/local/SKILL.md
-(cd "$PROJECT" && AGENT_SYNC_ROOT="$ROOT" "$ROOT/bin/ai-config-sync" guard-commit "git commit -m paired") >/dev/null
+(cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired") >/dev/null
 
 printf '{"hooks": {}}\n' > "$PROJECT/.codex/hooks.json"
 git -C "$PROJECT" add .codex/hooks.json
-if (cd "$PROJECT" && AGENT_SYNC_ROOT="$ROOT" "$ROOT/bin/ai-config-sync" guard-commit "git commit -m one-sided-hooks") >/dev/null 2>&1; then
+if (cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m one-sided-hooks") >/dev/null 2>&1; then
   fail "one-sided project-local hook registration was not blocked"
 fi
 
 printf '{"hooks": {}}\n' > "$PROJECT/.claude/settings.json"
 git -C "$PROJECT" add -f .claude/settings.json
-(cd "$PROJECT" && AGENT_SYNC_ROOT="$ROOT" "$ROOT/bin/ai-config-sync" guard-commit "git commit -m paired-hooks") >/dev/null
+(cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired-hooks") >/dev/null
 
 printf 'smoke-test: ok\n'

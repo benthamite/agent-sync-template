@@ -1,110 +1,124 @@
 # Agent Sync Template
 
-This is a starter kit for keeping Claude Code and Codex on equal footing. It gives both agents the same global instructions, equivalent skills, and equivalent hooks, while accounting for the fact that the two tools read different filenames and different hook registration formats.
+This is a small toolkit for keeping Claude Code and Codex configuration in sync without requiring a particular directory layout.
 
-The system has three parts:
+You tell the toolkit where your Claude files live and where your Codex files live. It then audits the mapped pairs and provides hook commands that remind or block an agent when it edits only one side.
 
-1. A small source repository that stores the canonical Claude and Codex files side by side.
-2. Symlinks from each tool's live config directory into that repository.
-3. Audit and hook scripts that remind or block you when you edit only one side of a paired Claude/Codex artifact.
+It does not install sample skills. It does not require symlinks. It does not assume that your configuration lives inside this repository.
 
-The template is intentionally small. It is meant to be copied, tested, and then expanded with your real instructions, skills, hooks, and project-local conventions.
+## Try It
 
-## Layout
-
-```text
-agent-sync-template/
-├── ai-config-sync.json
-├── bin/
-│   └── ai-config-sync
-├── claude/
-│   ├── CLAUDE.md
-│   ├── hooks/
-│   └── skills/
-└── codex/
-    ├── AGENTS.md
-    ├── config.toml
-    ├── hooks.json
-    ├── hooks/
-    ├── rules/
-    └── skills/
-```
-
-`claude/` contains the files Claude Code should see. `codex/` contains the files Codex should see. The files are not always byte-for-byte identical, because the tools use different formats, but the audit script checks that paired files stay semantically synchronized.
-
-## Install
-
-Run this from the template checkout:
-
-```sh
-./install.sh
-```
-
-The installer creates a stable symlink at `~/.agent-sync-template`, then links the global Claude and Codex files into the live locations each tool reads:
-
-```text
-~/.claude/CLAUDE.md  -> ~/.agent-sync-template/claude/CLAUDE.md
-~/.claude/skills     -> ~/.agent-sync-template/claude/skills
-~/.codex/AGENTS.md   -> ~/.agent-sync-template/codex/AGENTS.md
-~/.codex/config.toml -> ~/.agent-sync-template/codex/config.toml
-~/.codex/hooks.json  -> ~/.agent-sync-template/codex/hooks.json
-~/.codex/rules       -> ~/.agent-sync-template/codex/rules
-~/.codex/skills      -> ~/.agent-sync-template/codex/skills
-```
-
-Claude Code stores some mutable settings in `~/.claude/settings.json`, so this template does not symlink that file. Instead, the installer backs it up and merges in hook registrations that point to `~/.agent-sync-template/claude/hooks/`.
-
-Codex keeps hook registrations in `~/.codex/hooks.json` and global config in `~/.codex/config.toml`. Those are symlinked because this template expects them to be managed as source-controlled configuration.
-
-## Verify
-
-Before installing, run:
+Run the smoke test first:
 
 ```sh
 ./smoke-test.sh
 ```
 
-After installing, run:
+The smoke test creates temporary Claude/Codex instruction files, skills, hooks, and project-local files. It then verifies that one-sided edits are blocked and paired edits are accepted.
+
+## Configure Your Paths
+
+Copy the example config:
 
 ```sh
-bin/ai-config-sync audit-live
+cp ai-config-sync.example.json ai-config-sync.json
 ```
 
-`audit` checks the template repository itself. `audit-live` also checks that the live `~/.claude` and `~/.codex` symlinks point where the template expects.
+Then edit `ai-config-sync.json` so it points at your real files:
 
-## Daily Use
+```json
+{
+  "global": {
+    "file_pairs": [
+      {
+        "name": "global instructions",
+        "claude": "~/.claude/CLAUDE.md",
+        "codex": "~/.codex/AGENTS.md",
+        "normalizer": "instructions"
+      }
+    ],
+    "skill_roots": [
+      {
+        "name": "global skills",
+        "claude": "~/.claude/skills",
+        "codex": "~/.codex/skills"
+      }
+    ],
+    "hook_roots": [
+      {
+        "name": "global hooks",
+        "claude": "~/.claude/hooks",
+        "codex": "~/.codex/hooks"
+      }
+    ]
+  }
+}
+```
 
-When you edit a global Claude artifact, edit the corresponding Codex artifact in the same session, and vice versa. For example:
+Those paths are examples. Use whatever paths your setup already uses.
+
+## Port Your Existing Files
+
+After the paths are configured, port your existing skills and hooks so both tools have counterparts:
 
 ```text
-claude/CLAUDE.md                 <-> codex/AGENTS.md
-claude/skills/example/SKILL.md   <-> codex/skills/example/SKILL.md
-claude/hooks/remind-*.sh         <-> codex/hooks/remind-*.sh
+Claude skill root / NAME / SKILL.md  <->  Codex skill root / NAME / SKILL.md
+Claude hook root / HOOK              <->  Codex hook root / HOOK
+Claude instructions                  <->  Codex instructions
 ```
 
-Project-local files are treated the same way. If a project contains `.claude/skills/foo/SKILL.md` and `.codex/skills/foo/SKILL.md`, the guard treats those as a paired local skill. The same applies to `.claude/hooks/` and `.codex/hooks/`, and to Claude/Codex hook registration files such as `.claude/settings.json` and `.codex/hooks.json`.
+The two sides do not need to be byte-for-byte identical. Claude and Codex may need different frontmatter, hook payload parsing, or registration syntax. They should implement the same behavior.
 
-The hooks are a safety net, not the source of truth. The source of truth is the paired file layout plus the manifest in `ai-config-sync.json`.
+For an agent-assisted setup, open this repository in Claude Code or Codex and ask the agent to follow `BOOTSTRAP.md`. That prompt tells the agent to inventory your real files, create missing counterparts, preserve mutable settings, and run the audit.
 
-## Adapting This Template
+## Audit
 
-Start by editing:
-
-```text
-claude/CLAUDE.md
-codex/AGENTS.md
-claude/skills/example/SKILL.md
-codex/skills/example/SKILL.md
-ai-config-sync.json
-```
-
-Then run:
+Run:
 
 ```sh
 bin/ai-config-sync audit
-./smoke-test.sh
 ```
 
-If you add a new global skill, add both sides and record the pair in `ai-config-sync.json`. If you add a hook, add the Claude and Codex wrappers and update the relevant hook registration format for each tool.
+Use `--config` if your mapping file lives elsewhere:
 
-For a reliable assisted setup, give `BOOTSTRAP.md` to Claude Code or Codex in a fresh session and ask it to adapt the template to your machine.
+```sh
+bin/ai-config-sync --config /path/to/ai-config-sync.json audit
+```
+
+The audit checks global instruction pairs, skill roots, hook roots, and registration pairs from the config. It reports missing counterparts and content drift after basic tool-specific normalization.
+
+## Hook Commands
+
+Register these commands in your existing Claude and Codex hook configuration:
+
+```sh
+/path/to/agent-sync-template/hooks/require-commit-sync.sh
+/path/to/agent-sync-template/hooks/remind-claude.sh
+/path/to/agent-sync-template/hooks/remind-codex.sh
+```
+
+If your `ai-config-sync.json` is not in the toolkit repo, set `AGENT_SYNC_CONFIG` in the hook command:
+
+```sh
+AGENT_SYNC_CONFIG=/path/to/ai-config-sync.json /path/to/agent-sync-template/hooks/require-commit-sync.sh
+```
+
+The reminder hooks run after edits. The commit guard runs before `git commit` and blocks staged one-sided changes. The same guard also handles project-local files using the `project_local` section of the config, such as:
+
+```text
+.claude/skills/      <-> .codex/skills/
+.claude/hooks/       <-> .codex/hooks/
+.claude/settings.json <-> .codex/hooks.json
+```
+
+## Commands
+
+```sh
+bin/ai-config-sync audit
+bin/ai-config-sync inventory
+bin/ai-config-sync guard-commit "git commit -m message"
+bin/ai-config-sync remind --agent claude
+bin/ai-config-sync remind --agent codex
+```
+
+`inventory` prints the same missing or drifting pairs as the audit, but without framing it as a pass/fail check.

@@ -1,0 +1,61 @@
+{
+  "global": {
+    "file_pairs": [
+      {
+        "name": "global instructions",
+        "claude": "~/path/to/claude/CLAUDE.md",
+        "codex": "~/path/to/codex/AGENTS.md",
+        "normalizer": "instructions"
+      }
+    ],
+    "skill_roots": [
+      {
+        "name": "global skills",
+        "claude": "~/path/to/claude/skills",
+        "codex": "~/path/to/codex/skills"
+      }
+    ],
+    "hook_roots": [
+      {
+        "name": "global hooks",
+        "claude": "~/path/to/claude/hooks",
+        "codex": "~/path/to/codex/hooks"
+      }
+    ],
+    "registration_pairs": [
+      {
+        "name": "hook registrations",
+        "claude": "~/.claude/settings.json",
+        "codex": "~/.codex/hooks.json"
+      }
+    ]
+  },
+  "project_local": {
+    "skill_roots": [
+      {
+        "claude": ".claude/skills",
+        "codex": ".codex/skills"
+      }
+    ],
+    "hook_roots": [
+      {
+        "claude": ".claude/hooks",
+        "codex": ".codex/hooks"
+      }
+    ],
+    "registration_pairs": [
+      {
+        "claude": ".claude/settings.json",
+        "codex": ".codex/hooks.json"
+      }
+    ]
+  },
+  "ignore": [
+    "**/.DS_Store",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/tmp/**",
+    "**/cache/**"
+  ]
+}
+

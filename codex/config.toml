@@ -1,8 +1,0 @@
-project_doc_fallback_filenames = ["AGENTS.md"]
-
-[hooks]
-enabled = true
-config_file = "~/.codex/hooks.json"
-
-[[rules]]
-path = "~/.codex/rules/default.rules"
