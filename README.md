@@ -6,7 +6,7 @@ The setup agent infers where your Claude files live and where your Codex files l
 
 It does not install sample skills. It does not require symlinks. It does not assume that your configuration lives inside this repository.
 
-## Quick Start
+## Quick start
 
 Give Claude Code or Codex this prompt:
 
@@ -18,7 +18,7 @@ Clone the repository to a sensible local location if it is not already available
 
 `BOOTSTRAP.md` contains the operational instructions. The user should not have to clone the repo, run the test, fill in paths, port files, or register hooks manually.
 
-## What The Agent Writes
+## What the agent writes
 
 The generated `ai-config-sync.json` maps your real Claude and Codex files. It will look roughly like this, but with paths inferred from your machine:
 
@@ -74,7 +74,7 @@ PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
 
 That means: if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no `.claude/` or `.codex/` directory, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
 
-## Ported Files
+## Ported files
 
 The setup agent should port your existing skills and hooks so both tools have counterparts:
 
@@ -102,7 +102,7 @@ bin/ai-config-sync --config /path/to/ai-config-sync.json audit
 
 The audit checks global instruction pairs, skill roots, hook roots, and registration pairs from the config. It reports missing counterparts and content drift after basic tool-specific normalization.
 
-## Hook Commands
+## Hook commands
 
 `BOOTSTRAP.md` asks the setup agent to register the hooks for you. This section shows the commands that need to end up in your Claude and Codex hook configuration:
 
