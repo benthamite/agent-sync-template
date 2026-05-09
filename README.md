@@ -2,7 +2,7 @@
 
 This is a small toolkit for keeping Claude Code and Codex configuration in sync without requiring a particular directory layout.
 
-You tell the toolkit where your Claude files live and where your Codex files live. It then audits the mapped pairs and provides hook commands that remind or block an agent when it edits only one side.
+The setup agent infers where your Claude files live and where your Codex files live, records those paths in a small config file, ports missing counterparts, and registers hook commands that remind or block an agent when it edits only one side.
 
 It does not install sample skills. It does not require symlinks. It does not assume that your configuration lives inside this repository.
 
@@ -16,15 +16,26 @@ Run the smoke test first:
 
 The smoke test creates temporary Claude/Codex instruction files, skills, hooks, and project-local files. It then verifies that one-sided edits are blocked and paired edits are accepted.
 
-## Configure Your Paths
+## Set It Up With An Agent
 
-Copy the example config:
+After the smoke test passes, open this repository in Claude Code or Codex and ask the agent to follow `BOOTSTRAP.md`.
 
-```sh
-cp ai-config-sync.example.json ai-config-sync.json
-```
+The agent should:
 
-Then edit `ai-config-sync.json` so it points at your real files:
+1. Inspect your existing Claude and Codex configuration.
+2. Create `ai-config-sync.json` from `ai-config-sync.example.json`.
+3. Fill in the real global paths it finds.
+4. Choose the appropriate `project_local` rule.
+5. Inventory existing skills and hooks.
+6. Port missing counterparts.
+7. Register the reminder and commit-guard hooks.
+8. Run the audit.
+
+The agent should ask you only when it cannot infer a path, cannot determine which convention you want, or would need to overwrite/merge a sensitive mutable settings file.
+
+## What The Agent Writes
+
+The generated `ai-config-sync.json` maps your real Claude and Codex files. It will look roughly like this, but with paths inferred from your machine:
 
 ```json
 {
@@ -55,11 +66,9 @@ Then edit `ai-config-sync.json` so it points at your real files:
 }
 ```
 
-Those paths are examples. Use whatever paths your setup already uses.
+The `global` section points to specific files and directories on your machine.
 
-The `global` section points to specific files and directories on your machine. Fill those in with your actual global Claude and Codex configuration paths.
-
-For `project_local`, choose one of these options:
+For `project_local`, the agent should make one of these choices and explain it in its summary:
 
 ```text
 Keep the defaults   if project-local files use .claude/ and .codex/,
@@ -80,9 +89,9 @@ PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
 
 That means: if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no `.claude/` or `.codex/` directory, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
 
-## Port Your Existing Files
+## Ported Files
 
-After the paths are configured, port your existing skills and hooks so both tools have counterparts:
+The setup agent should port your existing skills and hooks so both tools have counterparts:
 
 ```text
 Claude skill root / NAME / SKILL.md  <->  Codex skill root / NAME / SKILL.md
@@ -91,8 +100,6 @@ Claude instructions                  <->  Codex instructions
 ```
 
 The two sides do not need to be byte-for-byte identical. Claude and Codex may need different frontmatter, hook payload parsing, or registration syntax. They should implement the same behavior.
-
-For an agent-assisted setup, open this repository in Claude Code or Codex and ask the agent to follow `BOOTSTRAP.md`. That prompt tells the agent to inventory your real files, create missing counterparts, preserve mutable settings, and run the audit.
 
 ## Audit
 
@@ -112,7 +119,7 @@ The audit checks global instruction pairs, skill roots, hook roots, and registra
 
 ## Hook Commands
 
-Register these commands in your existing Claude and Codex hook configuration:
+`BOOTSTRAP.md` asks the setup agent to register the hooks for you. This section shows the commands that need to end up in your Claude and Codex hook configuration:
 
 ```sh
 /path/to/agent-sync-template/hooks/require-commit-sync.sh
@@ -120,7 +127,7 @@ Register these commands in your existing Claude and Codex hook configuration:
 /path/to/agent-sync-template/hooks/remind-codex.sh
 ```
 
-If your `ai-config-sync.json` is not in the toolkit repo, set `AGENT_SYNC_CONFIG` in the hook command:
+If your `ai-config-sync.json` is not in the toolkit repo, the registered hook command should set `AGENT_SYNC_CONFIG`:
 
 ```sh
 AGENT_SYNC_CONFIG=/path/to/ai-config-sync.json /path/to/agent-sync-template/hooks/require-commit-sync.sh
