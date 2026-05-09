@@ -59,7 +59,9 @@ Those paths are examples. Use whatever paths your setup already uses.
 
 The `global` section points to specific files and directories on your machine. Fill those in with your actual global Claude and Codex configuration paths.
 
-The `project_local` section is different. It defines conventions relative to whatever git repository the agent is currently editing. The default means:
+The `project_local` section is optional. It does not require you to create `.claude/` or `.codex/` directories in existing projects. It defines what to do only when a project already has project-local agent files, or when you deliberately add them to a particular project.
+
+The default convention means:
 
 ```text
 PROJECT/.claude/skills/      <-> PROJECT/.codex/skills/
@@ -67,7 +69,9 @@ PROJECT/.claude/hooks/       <-> PROJECT/.codex/hooks/
 PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
 ```
 
-You do not need to create those directories in every project. They matter only in projects that already have project-local agent files, or in projects where you decide to add them. If an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If your projects use different local paths, change the `project_local` paths. If you do not want project-local enforcement, set those arrays to `[]`.
+That means: if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no `.claude/` or `.codex/` directory, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
+
+If your projects use different local paths, change the `project_local` paths. If you do not want project-local enforcement at all, set those arrays to `[]`.
 
 ## Port Your Existing Files
 
@@ -115,7 +119,7 @@ If your `ai-config-sync.json` is not in the toolkit repo, set `AGENT_SYNC_CONFIG
 AGENT_SYNC_CONFIG=/path/to/ai-config-sync.json /path/to/agent-sync-template/hooks/require-commit-sync.sh
 ```
 
-The reminder hooks run after edits. The commit guard runs before `git commit` and blocks staged one-sided changes. The same guard also handles project-local files using the `project_local` section of the config, such as:
+The reminder hooks run after edits. The commit guard runs before `git commit` and blocks staged one-sided changes. The same guard can also handle optional project-local files using the `project_local` section of the config, such as:
 
 ```text
 .claude/skills/      <-> .codex/skills/
@@ -123,7 +127,7 @@ The reminder hooks run after edits. The commit guard runs before `git commit` an
 .claude/settings.json <-> .codex/hooks.json
 ```
 
-Project-local paths are resolved inside the git repository being committed. They are not global paths and they are not scanned across your whole filesystem.
+Project-local paths are resolved inside the git repository being committed. They are not global paths, they are not scanned across your whole filesystem, and they do not require changing projects that do not use project-local agent configuration.
 
 ## Commands
 

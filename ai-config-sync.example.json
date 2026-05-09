@@ -31,7 +31,7 @@
     ]
   },
   "project_local": {
-    "applies_to": "These paths are relative to whichever git repository the agent is editing. Leave them as conventions, change them if your projects use different local directories, or set the arrays to [] to disable project-local enforcement.",
+    "applies_to": "Optional. These paths are relative to the git repository being edited. They do not require creating directories in existing projects. They apply only when a staged/edited file is already under one of these paths, or when you deliberately add project-local agent files to a project. Change them if your projects use different local paths, or set the arrays to [] to disable project-local enforcement.",
     "skill_roots": [
       {
         "name": "project-local skills",
