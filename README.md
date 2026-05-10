@@ -11,12 +11,12 @@ It does not install sample skills. It does not require symlinks. It does not ass
 Give Claude Code or Codex this prompt:
 
 ```text
-Set up Claude Code / Codex synchronization using https://github.com/benthamite/agent-sync-template.
+Set up Claude Code <> Codex synchronization using https://github.com/benthamite/agent-sync-template.
 
-Clone the repository to a sensible local location if it is not already available. Run its smoke test before touching my live Claude or Codex configuration. Then follow BOOTSTRAP.md exactly.
+- Clone the repository to a sensible local location if it is not already available.
+- Run its smoke test before touching my live Claude or Codex configuration.
+- Then follow BOOTSTRAP.md exactly.
 ```
-
-`BOOTSTRAP.md` contains the operational instructions. The user should not have to clone the repo, run the test, fill in paths, port files, or register hooks manually.
 
 ## What the agent writes
 
