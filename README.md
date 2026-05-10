@@ -1,6 +1,6 @@
 # Agent Sync Template
 
-This is a small toolkit for keeping Claude Code and Codex configuration in sync without requiring a particular directory layout.
+This is a small toolkit for keeping Claude Code and Codex configuration in sync without requiring a particular directory layout. It is a companion to my note [How I keep Claude Code and Codex in sync](https://stafforini.com/notes/how-i-keep-claude-code-and-codex-in-sync/).
 
 The setup agent infers where your Claude files live and where your Codex files live, records those paths in a small config file, ports missing counterparts, and registers hook commands that remind or block an agent when it edits only one side.
 
