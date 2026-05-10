@@ -321,8 +321,22 @@ def add_exact_pair(pairs: dict[Path, Path], left: Path, right: Path) -> None:
     pairs[right.resolve()] = left.resolve()
 
 
+def project_local_instruction_pairs_enabled(config: dict) -> bool:
+    local_cfg = config.get("project_local", {})
+    return bool(local_cfg.get("instruction_pairs"))
+
+
+def instruction_counterpart(path: Path) -> Path | None:
+    if path.name == "CLAUDE.md":
+        return path.with_name("AGENTS.md")
+    if path.name == "AGENTS.md":
+        return path.with_name("CLAUDE.md")
+    return None
+
+
 def counterpart_pairs_for_repo(config: dict, base: Path, repo: Path) -> dict[Path, Path]:
     pairs: dict[Path, Path] = {}
+    repo_paths = staged_paths(repo) | changed_paths(repo)
     global_cfg = config.get("global", {})
     for item in global_cfg.get("file_pairs", []) + global_cfg.get("registration_pairs", []):
         add_exact_pair(pairs, expand_path(item["claude"], base), expand_path(item["codex"], base))
@@ -331,7 +345,7 @@ def counterpart_pairs_for_repo(config: dict, base: Path, repo: Path) -> dict[Pat
         for item in global_cfg.get(key, []):
             left = expand_path(item["claude"], base)
             right = expand_path(item["codex"], base)
-            for path in staged_paths(repo) | changed_paths(repo):
+            for path in repo_paths:
                 rel = same_or_under(path, left)
                 if rel is not None:
                     add_exact_pair(pairs, path, right / rel)
@@ -340,13 +354,20 @@ def counterpart_pairs_for_repo(config: dict, base: Path, repo: Path) -> dict[Pat
                     add_exact_pair(pairs, path, left / rel)
 
     local_cfg = config.get("project_local", {})
+    if project_local_instruction_pairs_enabled(config):
+        for path in repo_paths:
+            if same_or_under(path, repo) is None:
+                continue
+            counterpart = instruction_counterpart(path)
+            if counterpart is not None:
+                add_exact_pair(pairs, path, counterpart)
     for item in local_cfg.get("registration_pairs", []):
         add_exact_pair(pairs, repo / item["claude"], repo / item["codex"])
     for key in ("skill_roots", "hook_roots"):
         for item in local_cfg.get(key, []):
             left = (repo / item["claude"]).resolve()
             right = (repo / item["codex"]).resolve()
-            for path in staged_paths(repo) | changed_paths(repo):
+            for path in repo_paths:
                 rel = same_or_under(path, left)
                 if rel is not None:
                     add_exact_pair(pairs, path, right / rel)

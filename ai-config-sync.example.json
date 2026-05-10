@@ -31,7 +31,16 @@
     ]
   },
   "project_local": {
-    "what_to_do": "The setup agent should infer one choice: leave this unchanged if project-local files use .claude/ and .codex/ or if no project-local files are currently used; edit these paths if project-local files use different directories; set skill_roots, hook_roots, and registration_pairs to [] if project-local checks are not wanted. This section is a conditional rule for the current git repo, not a request to create directories.",
+    "what_to_do": "The setup agent should infer one choice: leave this unchanged if project-local files use sibling CLAUDE.md/AGENTS.md plus .claude/ and .codex/, or if no project-local files are currently used; edit these paths if project-local files use different directories; set instruction_pairs, skill_roots, hook_roots, and registration_pairs to [] if project-local checks are not wanted. This section is a conditional rule for the current git repo, not a request to create directories.",
+    "instruction_pairs": [
+      {
+        "name": "project-local instructions",
+        "claude": "CLAUDE.md",
+        "codex": "AGENTS.md",
+        "mode": "sibling",
+        "normalizer": "instructions"
+      }
+    ],
     "skill_roots": [
       {
         "name": "project-local skills",

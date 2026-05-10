@@ -47,6 +47,38 @@ The generated `ai-config-sync.json` maps your real Claude and Codex files. It wi
         "codex": "~/.codex/hooks"
       }
     ]
+  },
+  "project_local": {
+    "instruction_pairs": [
+      {
+        "name": "project-local instructions",
+        "claude": "CLAUDE.md",
+        "codex": "AGENTS.md",
+        "mode": "sibling",
+        "normalizer": "instructions"
+      }
+    ],
+    "skill_roots": [
+      {
+        "name": "project-local skills",
+        "claude": ".claude/skills",
+        "codex": ".codex/skills"
+      }
+    ],
+    "hook_roots": [
+      {
+        "name": "project-local hooks",
+        "claude": ".claude/hooks",
+        "codex": ".codex/hooks"
+      }
+    ],
+    "registration_pairs": [
+      {
+        "name": "project-local hook registrations",
+        "claude": ".claude/settings.json",
+        "codex": ".codex/hooks.json"
+      }
+    ]
   }
 }
 ```
@@ -56,7 +88,8 @@ The `global` section points to specific files and directories on your machine.
 For `project_local`, the agent should make one of these choices and explain it in its summary:
 
 ```text
-Keep the defaults   if project-local files use .claude/ and .codex/,
+Keep the defaults   if project-local files use sibling CLAUDE.md/AGENTS.md
+                    and .claude/ / .codex/,
                     or if you do not currently use project-local files.
 Edit the paths      if your project-local files use different directories.
 Set arrays to []    if you never want project-local checks.
@@ -67,12 +100,14 @@ Keeping the defaults does not create any directories and does not require you to
 The default convention means:
 
 ```text
+PROJECT/CLAUDE.md             <-> PROJECT/AGENTS.md
+PROJECT/path/CLAUDE.md        <-> PROJECT/path/AGENTS.md
 PROJECT/.claude/skills/      <-> PROJECT/.codex/skills/
 PROJECT/.claude/hooks/       <-> PROJECT/.codex/hooks/
 PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
 ```
 
-That means: if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no `.claude/` or `.codex/` directory, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
+That means: if an agent edits `PROJECT/CLAUDE.md`, the guard expects `PROJECT/AGENTS.md` to be edited too; if it edits `PROJECT/docs/CLAUDE.md`, the guard expects `PROJECT/docs/AGENTS.md`. Likewise, if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no local agent files, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
 
 ## Ported files
 
@@ -82,6 +117,7 @@ The setup agent should port your existing skills and hooks so both tools have co
 Claude skill root / NAME / SKILL.md  <->  Codex skill root / NAME / SKILL.md
 Claude hook root / HOOK              <->  Codex hook root / HOOK
 Claude instructions                  <->  Codex instructions
+Project CLAUDE.md                    <->  sibling AGENTS.md
 ```
 
 The two sides do not need to be byte-for-byte identical. Claude and Codex may need different frontmatter, hook payload parsing, or registration syntax. They should implement the same behavior.
@@ -121,6 +157,8 @@ AGENT_SYNC_CONFIG=/path/to/ai-config-sync.json /path/to/agent-sync-template/hook
 The reminder hooks run after edits. The commit guard runs before `git commit` and blocks staged one-sided changes. The same guard can also handle optional project-local files using the `project_local` section of the config, such as:
 
 ```text
+CLAUDE.md              <-> AGENTS.md
+path/CLAUDE.md         <-> path/AGENTS.md
 .claude/skills/      <-> .codex/skills/
 .claude/hooks/       <-> .codex/hooks/
 .claude/settings.json <-> .codex/hooks.json

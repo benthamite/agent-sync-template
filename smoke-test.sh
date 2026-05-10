@@ -102,6 +102,14 @@ cat > "$CONFIG_REPO/ai-config-sync.json" <<EOF
     ]
   },
   "project_local": {
+    "instruction_pairs": [
+      {
+        "claude": "CLAUDE.md",
+        "codex": "AGENTS.md",
+        "mode": "sibling",
+        "normalizer": "instructions"
+      }
+    ],
     "skill_roots": [
       {
         "claude": ".claude/skills",
@@ -143,11 +151,39 @@ git -C "$CONFIG_REPO" add codex/skills/alpha/SKILL.md
 
 PROJECT="$TMP/project"
 mkdir -p -- "$PROJECT/.claude/skills/local" "$PROJECT/.codex/skills/local"
+printf '# Project instructions\n' > "$PROJECT/CLAUDE.md"
+printf '# Project instructions\n' > "$PROJECT/AGENTS.md"
 printf '# Local Skill\n' > "$PROJECT/.claude/skills/local/SKILL.md"
 printf '# Local Skill\n' > "$PROJECT/.codex/skills/local/SKILL.md"
 git -C "$PROJECT" init -q
 git -C "$PROJECT" add .
 git -C "$PROJECT" commit -q -m baseline
+
+printf '\nOne-sided project instruction edit.\n' >> "$PROJECT/CLAUDE.md"
+git -C "$PROJECT" add CLAUDE.md
+if (cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m one-sided-instructions") >/dev/null 2>&1; then
+  fail "one-sided project-local instruction edit was not blocked"
+fi
+
+printf '\nOne-sided project instruction edit.\n' >> "$PROJECT/AGENTS.md"
+git -C "$PROJECT" add AGENTS.md
+(cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired-instructions") >/dev/null
+
+mkdir -p -- "$PROJECT/nested"
+printf '# Nested instructions\n' > "$PROJECT/nested/CLAUDE.md"
+printf '# Nested instructions\n' > "$PROJECT/nested/AGENTS.md"
+git -C "$PROJECT" add nested/CLAUDE.md nested/AGENTS.md
+git -C "$PROJECT" commit -q -m nested-baseline
+
+printf '\nOne-sided nested instruction edit.\n' >> "$PROJECT/nested/AGENTS.md"
+git -C "$PROJECT" add nested/AGENTS.md
+if (cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m one-sided-nested-instructions") >/dev/null 2>&1; then
+  fail "one-sided nested project-local instruction edit was not blocked"
+fi
+
+printf '\nOne-sided nested instruction edit.\n' >> "$PROJECT/nested/CLAUDE.md"
+git -C "$PROJECT" add nested/CLAUDE.md
+(cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired-nested-instructions") >/dev/null
 
 printf '\nOne-sided local edit.\n' >> "$PROJECT/.codex/skills/local/SKILL.md"
 git -C "$PROJECT" add .codex/skills/local/SKILL.md
