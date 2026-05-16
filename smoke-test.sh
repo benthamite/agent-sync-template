@@ -237,6 +237,19 @@ printf '\nOne-sided local edit.\n' >> "$PROJECT/.claude/skills/local/SKILL.md"
 git -C "$PROJECT" add .claude/skills/local/SKILL.md
 (cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired") >/dev/null
 
+REMINDER_OUTPUT=$(cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" remind --agent codex)
+python3 - "$REMINDER_OUTPUT" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+output = payload.get("hookSpecificOutput") or {}
+if output.get("hookEventName") != "PostToolUse":
+    raise SystemExit("Codex reminder is missing hookSpecificOutput.hookEventName")
+if "additionalContext" not in output:
+    raise SystemExit("Codex reminder is missing hookSpecificOutput.additionalContext")
+PY
+
 printf '{"hooks": {}}\n' > "$PROJECT/.codex/hooks.json"
 git -C "$PROJECT" add .codex/hooks.json
 if (cd "$PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m one-sided-hooks") >/dev/null 2>&1; then

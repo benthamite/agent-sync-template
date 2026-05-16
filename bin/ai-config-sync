@@ -592,7 +592,16 @@ def remind(config: dict, base: Path, args: list[str]) -> int:
     if messages:
         text = "Claude/Codex sync reminder:\n" + "\n".join(f"- {m}" for m in messages)
     if agent == "codex":
-        print(json.dumps({"hookSpecificOutput": {"additionalContext": text}}))
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": text,
+                    }
+                }
+            )
+        )
     elif text:
         print(text)
     return 0
