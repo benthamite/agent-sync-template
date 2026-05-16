@@ -5,6 +5,7 @@ This is a small toolkit for keeping Claude Code and Codex configuration in sync 
 The setup agent infers where your Claude files live and where your Codex files live, records those paths in a small config file, ports missing counterparts, and registers hook commands that remind or block an agent when it edits only one side.
 
 It does not install sample skills. It does not require symlinks. It does not assume that your configuration lives inside this repository.
+It is directory-agnostic: the bootstrap must implement the same synchronization contract using the user's existing topology, not a hardcoded dotfiles layout.
 
 ## Quick start
 
@@ -49,6 +50,7 @@ The generated `ai-config-sync.json` maps your real Claude and Codex files. It wi
     ]
   },
   "project_local": {
+    "project_roots": [],
     "instruction_pairs": [
       {
         "name": "project-local instructions",
@@ -110,6 +112,8 @@ PROJECT/.mcp.json             <-> PROJECT/.codex/config.toml  (optional MCP wiri
 ```
 
 That means: if an agent edits `PROJECT/CLAUDE.md`, the guard expects `PROJECT/AGENTS.md` to be edited too; if it edits `PROJECT/docs/CLAUDE.md`, the guard expects `PROJECT/docs/AGENTS.md`. Likewise, if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no local agent files, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
+
+`project_roots` is an optional bootstrap/audit backstop. Add repositories or parent directories there when setup inventories existing project-local files; `bin/ai-config-sync audit` will then scan those roots for existing `CLAUDE.md`/`AGENTS.md`, `.claude/skills`/`.codex/skills`, `.claude/hooks`/`.codex/hooks`, and hook registration pairs. Leave it empty if you only want project-local enforcement when an agent edits or commits inside a project.
 
 ## Ported files
 
@@ -175,7 +179,7 @@ If your `ai-config-sync.json` is not in the toolkit repo, the registered hook co
 AGENT_SYNC_CONFIG=/path/to/ai-config-sync.json /path/to/agent-sync-template/hooks/require-commit-sync.sh
 ```
 
-The reminder hooks run after edits. The commit guard runs before `git commit` and blocks staged one-sided changes. The same guard can also handle optional project-local files using the `project_local` section of the config, such as:
+The reminder hooks run after edits. The commit guard runs before `git commit` and blocks one-sided commits, including already-staged changes, `git add ... && git commit ...`, `git -C ... commit ...`, and `git commit -a`. The same guard can also handle optional project-local files using the `project_local` section of the config, such as:
 
 ```text
 CLAUDE.md              <-> AGENTS.md

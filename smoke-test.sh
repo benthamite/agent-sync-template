@@ -24,6 +24,8 @@ export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
 export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
 
 CONFIG_REPO="$TMP/config"
+PROJECT="$TMP/project"
+COMMIT_PROJECT="$TMP/commit-project"
 mkdir -p \
   "$CONFIG_REPO/claude/skills/alpha" \
   "$CONFIG_REPO/codex/skills/alpha" \
@@ -99,6 +101,15 @@ args = ["npx", "-y", "sample-mcp"]
 SAMPLE_TOKEN = "codex-secret"
 EOF
 
+mkdir -p -- "$PROJECT/.claude/skills/local" "$PROJECT/.codex/skills/local"
+printf '# Project instructions\n' > "$PROJECT/CLAUDE.md"
+printf '# Project instructions\n' > "$PROJECT/AGENTS.md"
+printf '# Local Skill\n' > "$PROJECT/.claude/skills/local/SKILL.md"
+printf '# Local Skill\n' > "$PROJECT/.codex/skills/local/SKILL.md"
+git -C "$PROJECT" init -q
+git -C "$PROJECT" add .
+git -C "$PROJECT" commit -q -m baseline
+
 cat > "$CONFIG_REPO/ai-config-sync.json" <<EOF
 {
   "global": {
@@ -134,6 +145,9 @@ cat > "$CONFIG_REPO/ai-config-sync.json" <<EOF
     ]
   },
   "project_local": {
+    "project_roots": [
+      "$TMP"
+    ],
     "instruction_pairs": [
       {
         "claude": "CLAUDE.md",
@@ -171,6 +185,36 @@ git -C "$CONFIG_REPO" commit -q -m baseline
 
 "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" audit
 
+mv "$PROJECT/AGENTS.md" "$PROJECT/AGENTS.md.bak"
+if "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" audit >/dev/null 2>&1; then
+  fail "project-local audit did not detect a missing AGENTS.md counterpart"
+fi
+mv "$PROJECT/AGENTS.md.bak" "$PROJECT/AGENTS.md"
+
+mkdir -p -- "$COMMIT_PROJECT"
+printf '# Commit Project\n' > "$COMMIT_PROJECT/CLAUDE.md"
+printf '# Commit Project\n' > "$COMMIT_PROJECT/AGENTS.md"
+git -C "$COMMIT_PROJECT" init -q
+git -C "$COMMIT_PROJECT" add CLAUDE.md AGENTS.md
+git -C "$COMMIT_PROJECT" commit -q -m baseline
+
+printf '\nOne-sided combined edit.\n' >> "$COMMIT_PROJECT/CLAUDE.md"
+if (cd "$COMMIT_PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git add CLAUDE.md && git commit -m one-sided-combined") >/dev/null 2>&1; then
+  fail "one-sided project-local instruction edit was not blocked in git add && git commit"
+fi
+printf '\nOne-sided combined edit.\n' >> "$COMMIT_PROJECT/AGENTS.md"
+if ! (cd "$COMMIT_PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git add CLAUDE.md AGENTS.md && git commit -m paired-combined") >/dev/null 2>&1; then
+  fail "paired project-local instruction edit was blocked in git add && git commit"
+fi
+git -C "$COMMIT_PROJECT" add CLAUDE.md AGENTS.md
+git -C "$COMMIT_PROJECT" commit -q -m paired-combined
+
+printf '\nOne-sided commit-all edit.\n' >> "$COMMIT_PROJECT/AGENTS.md"
+if (cd "$COMMIT_PROJECT" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -am one-sided-commit-all") >/dev/null 2>&1; then
+  fail "one-sided project-local instruction edit was not blocked in git commit -a"
+fi
+git -C "$COMMIT_PROJECT" show HEAD:AGENTS.md > "$COMMIT_PROJECT/AGENTS.md"
+
 cp "$CONFIG_REPO/.codex/config.toml" "$CONFIG_REPO/.codex/config.toml.bak"
 perl -0pi -e 's/sample-mcp/other-mcp/' "$CONFIG_REPO/.codex/config.toml"
 if "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" audit >/dev/null 2>&1; then
@@ -187,16 +231,6 @@ fi
 printf '\nOne-sided global edit.\n' >> "$CONFIG_REPO/codex/skills/alpha/SKILL.md"
 git -C "$CONFIG_REPO" add codex/skills/alpha/SKILL.md
 (cd "$CONFIG_REPO" && "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" guard-commit "git commit -m paired") >/dev/null
-
-PROJECT="$TMP/project"
-mkdir -p -- "$PROJECT/.claude/skills/local" "$PROJECT/.codex/skills/local"
-printf '# Project instructions\n' > "$PROJECT/CLAUDE.md"
-printf '# Project instructions\n' > "$PROJECT/AGENTS.md"
-printf '# Local Skill\n' > "$PROJECT/.claude/skills/local/SKILL.md"
-printf '# Local Skill\n' > "$PROJECT/.codex/skills/local/SKILL.md"
-git -C "$PROJECT" init -q
-git -C "$PROJECT" add .
-git -C "$PROJECT" commit -q -m baseline
 
 printf '\nOne-sided project instruction edit.\n' >> "$PROJECT/CLAUDE.md"
 git -C "$PROJECT" add CLAUDE.md

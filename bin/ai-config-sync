@@ -177,7 +177,9 @@ def files_under(root: Path, patterns: list[str]) -> set[str]:
     return {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file() and not ignored(path.relative_to(root).as_posix(), patterns)
+        if path.is_file()
+        and ".git" not in path.relative_to(root).parts
+        and not ignored(path.relative_to(root).as_posix(), patterns)
     }
 
 
@@ -251,6 +253,139 @@ def compare_file_roots(
     return problems
 
 
+def global_pair_paths(config: dict, base: Path) -> set[Path]:
+    paths: set[Path] = set()
+    global_cfg = config.get("global", {})
+    for item in global_cfg.get("file_pairs", []) + global_cfg.get("registration_pairs", []):
+        paths.add(expand_path(item["claude"], base))
+        paths.add(expand_path(item["codex"], base))
+    for item in global_cfg.get("mcp_servers", []):
+        paths.add(expand_path(item["claude_config"], base))
+        paths.add(expand_path(item["codex_config"], base))
+    return paths
+
+
+def find_project_instruction_files(root: Path, patterns: list[str]) -> set[Path]:
+    if not root.exists():
+        return set()
+    paths: set[Path] = set()
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        for path in root.rglob(name):
+            rel = path.relative_to(root)
+            if path.is_file() and ".git" not in rel.parts and not ignored(rel.as_posix(), patterns):
+                paths.add(path.resolve())
+    return paths
+
+
+def relative_match_candidates(
+    root: Path,
+    relative: str,
+    patterns: list[str],
+    want_dir: bool,
+) -> set[Path]:
+    suffix = Path(relative).parts
+    if not suffix:
+        return set()
+    matches: set[Path] = set()
+    for path in root.rglob(suffix[-1]):
+        rel = path.relative_to(root)
+        if ".git" in rel.parts or ignored(rel.as_posix(), patterns):
+            continue
+        if tuple(rel.parts[-len(suffix) :]) != suffix:
+            continue
+        if want_dir and path.is_dir():
+            matches.add(path.resolve())
+        if not want_dir and path.is_file():
+            matches.add(path.resolve())
+    return matches
+
+
+def relative_counterpart(root: Path, path: Path, source_rel: str, target_rel: str) -> Path:
+    source_parts = Path(source_rel).parts
+    path_parts = path.relative_to(root).parts
+    prefix = path_parts[: len(path_parts) - len(source_parts)]
+    return (root.joinpath(*prefix) / target_rel).resolve()
+
+
+def compare_project_local_roots(config: dict, base: Path, patterns: list[str]) -> list[str]:
+    local_cfg = config.get("project_local", {})
+    roots = local_cfg.get("project_roots", [])
+    if not roots:
+        return []
+
+    problems: list[str] = []
+    globals_to_skip = global_pair_paths(config, base)
+    for raw_root in roots:
+        root = expand_path(raw_root, base)
+        if not root.exists():
+            problems.append(f"project-local root: missing path {root}")
+            continue
+
+        if local_cfg.get("instruction_pairs"):
+            seen_instruction_pairs: set[tuple[Path, Path]] = set()
+            for path in sorted(find_project_instruction_files(root, patterns)):
+                if path in globals_to_skip:
+                    continue
+                counterpart = instruction_counterpart(path)
+                if counterpart is None or counterpart.resolve() in globals_to_skip:
+                    continue
+                left = path if path.name == "CLAUDE.md" else counterpart
+                right = counterpart if path.name == "CLAUDE.md" else path
+                pair_key = tuple(sorted((left.resolve(), right.resolve()), key=str))
+                if pair_key in seen_instruction_pairs:
+                    continue
+                seen_instruction_pairs.add(pair_key)
+                label = f"project-local instructions {path.parent}"
+                problems.extend(
+                    compare_files(left, right, label, normalize_instructions)
+                )
+
+        for item in local_cfg.get("skill_roots", []):
+            pairs: dict[Path, Path] = {}
+            for left in relative_match_candidates(root, item["claude"], patterns, True):
+                pairs[left] = relative_counterpart(root, left, item["claude"], item["codex"])
+            for right in relative_match_candidates(root, item["codex"], patterns, True):
+                left = relative_counterpart(root, right, item["codex"], item["claude"])
+                pairs[left] = right
+            for left, right in sorted(pairs.items()):
+                problems.extend(
+                    compare_skill_roots(
+                        {**item, "claude": str(left), "codex": str(right)},
+                        base,
+                        patterns,
+                    )
+                )
+
+        for item in local_cfg.get("hook_roots", []):
+            pairs = {}
+            for left in relative_match_candidates(root, item["claude"], patterns, True):
+                pairs[left] = relative_counterpart(root, left, item["claude"], item["codex"])
+            for right in relative_match_candidates(root, item["codex"], patterns, True):
+                left = relative_counterpart(root, right, item["codex"], item["claude"])
+                pairs[left] = right
+            for left, right in sorted(pairs.items()):
+                problems.extend(
+                    compare_file_roots(
+                        {**item, "claude": str(left), "codex": str(right)},
+                        base,
+                        patterns,
+                        normalize_hook,
+                    )
+                )
+
+        for item in local_cfg.get("registration_pairs", []):
+            add_name = item.get("name", "project-local registration pair")
+            pairs = {}
+            for left in relative_match_candidates(root, item["claude"], patterns, False):
+                pairs[left] = relative_counterpart(root, left, item["claude"], item["codex"])
+            for right in relative_match_candidates(root, item["codex"], patterns, False):
+                left = relative_counterpart(root, right, item["codex"], item["claude"])
+                pairs[left] = right
+            for left, right in sorted(pairs.items()):
+                problems.extend(compare_files(left, right, add_name, normalize_text))
+    return problems
+
+
 def audit(config: dict, base: Path) -> list[str]:
     problems: list[str] = []
     patterns = config.get("ignore", [])
@@ -282,6 +417,7 @@ def audit(config: dict, base: Path) -> list[str]:
             problems.append(f"{name}: missing Codex registration file {right}")
     for item in global_cfg.get("mcp_servers", []):
         problems.extend(audit_mcp_server(item, base))
+    problems.extend(compare_project_local_roots(config, base, patterns))
     return problems
 
 
@@ -501,19 +637,128 @@ def git_command_repo(command: str) -> Path | None:
     return git_root(Path.cwd())
 
 
-def is_git_commit(command: str) -> bool:
+def shell_segments(command: str) -> list[list[str]]:
     try:
-        tokens = shlex.split(command)
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        tokens = list(lexer)
     except ValueError:
-        tokens = command.split()
-    for i, token in enumerate(tokens):
+        return []
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token and all(char in ";&|" for char in token):
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def git_segment(segment: list[str], cwd: Path) -> tuple[Path, Path, str, list[str]] | None:
+    for i, token in enumerate(segment):
         if token != "git":
             continue
-        tail = tokens[i + 1 :]
-        while tail and tail[0] == "-C" and len(tail) >= 2:
-            tail = tail[2:]
-        return bool(tail and tail[0] == "commit")
+        repo_cwd = cwd
+        tail = segment[i + 1 :]
+        while tail:
+            if tail[0] == "-C" and len(tail) >= 2:
+                target = Path(tail[1])
+                repo_cwd = target if target.is_absolute() else repo_cwd / target
+                tail = tail[2:]
+                continue
+            if tail[0] in {"-c", "--config-env"} and len(tail) >= 2:
+                tail = tail[2:]
+                continue
+            if tail[0].startswith("-"):
+                tail = tail[1:]
+                continue
+            break
+        if not tail:
+            return None
+        repo = git_root(repo_cwd)
+        if repo is None:
+            return None
+        return repo, repo_cwd, tail[0], tail[1:]
+    return None
+
+
+def is_git_commit(command: str) -> bool:
+    for segment in shell_segments(command):
+        parsed = git_segment(segment, Path.cwd())
+        if parsed is not None and parsed[2] == "commit":
+            return True
     return False
+
+
+def tracked_changed_paths(repo: Path) -> set[Path]:
+    proc = run_git(repo, "diff", "--name-only", "--diff-filter=ACMR")
+    if proc.returncode != 0:
+        return set()
+    return {(repo / line).resolve() for line in proc.stdout.splitlines() if line}
+
+
+def expand_git_add_pathspec(repo: Path, cwd: Path, spec: str, changed: set[Path]) -> set[Path]:
+    if spec in {".", ":/"}:
+        return set(changed)
+    path = Path(spec)
+    if not path.is_absolute():
+        path = cwd / path
+    path = path.resolve()
+    matched = {candidate for candidate in changed if same_or_under(candidate, path) is not None}
+    if matched:
+        return matched
+    if same_or_under(path, repo) is not None:
+        return {path}
+    return set()
+
+
+def git_add_paths(repo: Path, cwd: Path, args: list[str]) -> set[Path]:
+    changed = changed_paths(repo)
+    paths: set[Path] = set()
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in {"--pathspec-from-file", "--chmod"}:
+            skip_next = True
+            continue
+        if arg == "--":
+            continue
+        if arg.startswith("--pathspec-from-file=") or arg.startswith("--chmod="):
+            continue
+        if arg.startswith("-"):
+            continue
+        paths.update(expand_git_add_pathspec(repo, cwd, arg, changed))
+    return paths
+
+
+def commit_all_requested(args: list[str]) -> bool:
+    return any(arg in {"-a", "--all"} or (arg.startswith("-") and "a" in arg[1:]) for arg in args)
+
+
+def commit_candidate_paths(command: str, repo: Path) -> set[Path]:
+    paths = staged_paths(repo)
+    if not command:
+        return paths
+
+    cwd = Path.cwd()
+    for segment in shell_segments(command):
+        parsed = git_segment(segment, cwd)
+        if parsed is None:
+            continue
+        segment_repo, segment_cwd, subcommand, args = parsed
+        if segment_repo != repo:
+            continue
+        if subcommand == "add":
+            paths.update(git_add_paths(repo, segment_cwd, args))
+        elif subcommand == "commit" and commit_all_requested(args):
+            paths.update(tracked_changed_paths(repo))
+    return paths
 
 
 def one_sided_messages(config: dict, base: Path, repo: Path, paths: set[Path]) -> list[str]:
@@ -535,7 +780,7 @@ def guard_commit(config: dict, base: Path, args: list[str]) -> int:
     repo = git_command_repo(command) if command else git_root(Path.cwd())
     if repo is None:
         return 0
-    messages = one_sided_messages(config, base, repo, staged_paths(repo))
+    messages = one_sided_messages(config, base, repo, commit_candidate_paths(command, repo))
     if not messages:
         return 0
     print("Claude/Codex sync guard blocked this commit:", file=sys.stderr)
@@ -548,11 +793,25 @@ def guard_commit(config: dict, base: Path, args: list[str]) -> int:
 def payload_paths(payload: dict) -> list[str]:
     paths: list[str] = []
 
+    def patch_paths(text: str) -> None:
+        for line in text.splitlines():
+            for prefix in (
+                "*** Add File: ",
+                "*** Update File: ",
+                "*** Delete File: ",
+                "*** Move to: ",
+            ):
+                if line.startswith(prefix):
+                    paths.append(line.removeprefix(prefix))
+                    break
+
     def visit(value):
         if isinstance(value, dict):
             for key, child in value.items():
                 if key in {"file_path", "path"} and isinstance(child, str):
                     paths.append(child)
+                elif key in {"patch", "command", "input"} and isinstance(child, str):
+                    patch_paths(child)
                 else:
                     visit(child)
         elif isinstance(value, list):
