@@ -21,6 +21,8 @@ Inventory existing project-local instruction files in the target project areas. 
 
 Inventory my existing Claude and Codex skills and hooks. For each skill or hook that exists on only one side, create the missing counterpart in the configured location, adapting frontmatter, hook payload parsing, and registration syntax for the target tool. Do not treat either tool as the source of truth; the goal is paired behavior.
 
+Inventory my existing MCP server configuration. Claude Code and Codex do not automatically share MCP servers. If both tools should expose the same service, add an `mcp_servers` entry to `ai-config-sync.json` with the Claude config path, Codex config path, server names, required environment-variable names, and an identity-check command when one exists. Never print or diff secret values. If an MCP server intentionally exists on only one side, leave it out of `mcp_servers` and mention the divergence in your summary.
+
 Update the relevant Claude and Codex hook registrations so the reminder hooks and commit guard run from this toolkit. Add the toolkit's hook commands to the user's existing hook configuration; do not leave this as a manual follow-up unless the user declines permission or the file format cannot be determined. Preserve mutable settings files in place and merge changes instead of overwriting unrelated settings.
 
 When finished, run:

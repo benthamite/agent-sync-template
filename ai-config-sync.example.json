@@ -28,7 +28,8 @@
         "claude": "~/.claude/settings.json",
         "codex": "~/.codex/hooks.json"
       }
-    ]
+    ],
+    "mcp_servers": []
   },
   "project_local": {
     "what_to_do": "The setup agent should infer one choice: leave this unchanged if project-local files use sibling CLAUDE.md/AGENTS.md plus .claude/ and .codex/, or if no project-local files are currently used; edit these paths if project-local files use different directories; set instruction_pairs, skill_roots, hook_roots, and registration_pairs to [] if project-local checks are not wanted. This section is a conditional rule for the current git repo, not a request to create directories.",
@@ -61,7 +62,8 @@
         "claude": ".claude/settings.json",
         "codex": ".codex/hooks.json"
       }
-    ]
+    ],
+    "mcp_servers": []
   },
   "ignore": [
     "**/.DS_Store",

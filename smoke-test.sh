@@ -28,7 +28,8 @@ mkdir -p \
   "$CONFIG_REPO/claude/skills/alpha" \
   "$CONFIG_REPO/codex/skills/alpha" \
   "$CONFIG_REPO/claude/hooks" \
-  "$CONFIG_REPO/codex/hooks"
+  "$CONFIG_REPO/codex/hooks" \
+  "$CONFIG_REPO/.codex"
 
 cat > "$CONFIG_REPO/claude/CLAUDE.md" <<'EOF'
 # Global Claude instructions
@@ -75,6 +76,29 @@ cat > "$CONFIG_REPO/codex/hooks/sync.sh" <<'EOF'
 echo sync
 EOF
 
+cat > "$CONFIG_REPO/.mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "sample": {
+      "command": "/usr/bin/env",
+      "args": ["npx", "-y", "sample-mcp"],
+      "env": {
+        "SAMPLE_TOKEN": "claude-secret"
+      }
+    }
+  }
+}
+EOF
+
+cat > "$CONFIG_REPO/.codex/config.toml" <<'EOF'
+[mcp_servers.sample]
+command = "/usr/bin/env"
+args = ["npx", "-y", "sample-mcp"]
+
+[mcp_servers.sample.env]
+SAMPLE_TOKEN = "codex-secret"
+EOF
+
 cat > "$CONFIG_REPO/ai-config-sync.json" <<EOF
 {
   "global": {
@@ -98,6 +122,14 @@ cat > "$CONFIG_REPO/ai-config-sync.json" <<EOF
         "name": "global hooks",
         "claude": "$CONFIG_REPO/claude/hooks",
         "codex": "$CONFIG_REPO/codex/hooks"
+      }
+    ],
+    "mcp_servers": [
+      {
+        "name": "sample",
+        "claude_config": "$CONFIG_REPO/.mcp.json",
+        "codex_config": "$CONFIG_REPO/.codex/config.toml",
+        "required_env": ["SAMPLE_TOKEN"]
       }
     ]
   },
@@ -138,6 +170,13 @@ git -C "$CONFIG_REPO" add .
 git -C "$CONFIG_REPO" commit -q -m baseline
 
 "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" audit
+
+cp "$CONFIG_REPO/.codex/config.toml" "$CONFIG_REPO/.codex/config.toml.bak"
+perl -0pi -e 's/sample-mcp/other-mcp/' "$CONFIG_REPO/.codex/config.toml"
+if "$ROOT/bin/ai-config-sync" --config "$CONFIG_REPO/ai-config-sync.json" audit >/dev/null 2>&1; then
+  fail "MCP public config drift was not detected"
+fi
+mv "$CONFIG_REPO/.codex/config.toml.bak" "$CONFIG_REPO/.codex/config.toml"
 
 printf '\nOne-sided global edit.\n' >> "$CONFIG_REPO/claude/skills/alpha/SKILL.md"
 git -C "$CONFIG_REPO" add claude/skills/alpha/SKILL.md

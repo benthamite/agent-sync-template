@@ -78,7 +78,8 @@ The generated `ai-config-sync.json` maps your real Claude and Codex files. It wi
         "claude": ".claude/settings.json",
         "codex": ".codex/hooks.json"
       }
-    ]
+    ],
+    "mcp_servers": []
   }
 }
 ```
@@ -105,6 +106,7 @@ PROJECT/path/CLAUDE.md        <-> PROJECT/path/AGENTS.md
 PROJECT/.claude/skills/      <-> PROJECT/.codex/skills/
 PROJECT/.claude/hooks/       <-> PROJECT/.codex/hooks/
 PROJECT/.claude/settings.json <-> PROJECT/.codex/hooks.json
+PROJECT/.mcp.json             <-> PROJECT/.codex/config.toml  (optional MCP wiring)
 ```
 
 That means: if an agent edits `PROJECT/CLAUDE.md`, the guard expects `PROJECT/AGENTS.md` to be edited too; if it edits `PROJECT/docs/CLAUDE.md`, the guard expects `PROJECT/docs/AGENTS.md`. Likewise, if an agent edits `PROJECT/.claude/skills/foo/SKILL.md`, the guard expects the corresponding `PROJECT/.codex/skills/foo/SKILL.md` to be edited too. If the project has no local agent files, nothing happens. If the project has only one side and you edit it, the guard will ask you to port the counterpart or disable/change the `project_local` rule.
@@ -122,6 +124,25 @@ Project CLAUDE.md                    <->  sibling AGENTS.md
 
 The two sides do not need to be byte-for-byte identical. Claude and Codex may need different frontmatter, hook payload parsing, or registration syntax. They should implement the same behavior.
 
+## MCP servers
+
+MCP server configuration is wiring, not a semantic peer artifact like a skill. If both Claude Code and Codex should expose the same MCP-backed service, add an entry to `mcp_servers` so the audit can check the mechanical invariants:
+
+```json
+{
+  "name": "asana",
+  "claude_config": "~/work/project/.mcp.json",
+  "codex_config": "~/work/project/.codex/config.toml",
+  "claude_server": "asana",
+  "codex_server": "asana",
+  "compare_public_config": true,
+  "required_env": ["ASANA_ACCESS_TOKEN"],
+  "identity_check": "scripts/check-asana-mcp-identity.sh"
+}
+```
+
+The audit checks that both tools define the server, that public command/args/transport/url fields match when `compare_public_config` is true, and that required environment-variable names exist. It never prints or compares secret values. Use `identity_check` for service-specific account checks such as confirming that an Asana token resolves to the expected email address.
+
 ## Audit
 
 Run:
@@ -136,7 +157,7 @@ Use `--config` if your mapping file lives elsewhere:
 bin/ai-config-sync --config /path/to/ai-config-sync.json audit
 ```
 
-The audit checks global instruction pairs, skill roots, hook roots, and registration pairs from the config. It reports missing counterparts and content drift after basic tool-specific normalization.
+The audit checks global instruction pairs, skill roots, hook roots, registration pairs, and configured MCP server pairs. It reports missing counterparts and content drift after basic tool-specific normalization.
 
 ## Hook commands
 

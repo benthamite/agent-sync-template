@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Callable
 
@@ -279,6 +280,80 @@ def audit(config: dict, base: Path) -> list[str]:
             problems.append(f"{name}: missing Claude registration file {left}")
         if not right.exists():
             problems.append(f"{name}: missing Codex registration file {right}")
+    for item in global_cfg.get("mcp_servers", []):
+        problems.extend(audit_mcp_server(item, base))
+    return problems
+
+
+def load_mcp_config(path: Path) -> dict:
+    if path.suffix == ".toml":
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def mcp_server_entry(data: dict, family: str, name: str) -> dict | None:
+    key = "mcpServers" if family == "claude" else "mcp_servers"
+    servers = data.get(key) or {}
+    entry = servers.get(name)
+    return entry if isinstance(entry, dict) else None
+
+
+def public_mcp_entry(entry: dict) -> dict:
+    return {
+        key: entry.get(key)
+        for key in ("command", "args", "transport", "url")
+        if key in entry
+    }
+
+
+def audit_mcp_server(item: dict, base: Path) -> list[str]:
+    problems: list[str] = []
+    name = item.get("name", "mcp server")
+    claude_name = item.get("claude_server", name)
+    codex_name = item.get("codex_server", name)
+    claude_config = expand_path(item["claude_config"], base)
+    codex_config = expand_path(item["codex_config"], base)
+
+    try:
+        claude_data = load_mcp_config(claude_config)
+    except Exception as exc:
+        return [f"{name}: cannot read Claude MCP config {claude_config}: {exc}"]
+    try:
+        codex_data = load_mcp_config(codex_config)
+    except Exception as exc:
+        return [f"{name}: cannot read Codex MCP config {codex_config}: {exc}"]
+
+    claude = mcp_server_entry(claude_data, "claude", claude_name)
+    codex = mcp_server_entry(codex_data, "codex", codex_name)
+    if claude is None:
+        problems.append(f"{name}: missing Claude MCP server {claude_name} in {claude_config}")
+    if codex is None:
+        problems.append(f"{name}: missing Codex MCP server {codex_name} in {codex_config}")
+    if claude is None or codex is None:
+        return problems
+
+    if item.get("compare_public_config", True) and public_mcp_entry(claude) != public_mcp_entry(codex):
+        problems.append(f"{name}: Claude and Codex MCP command/args/transport/url differ")
+
+    for key in item.get("required_env", []):
+        if key not in (claude.get("env") or {}):
+            problems.append(f"{name}: Claude MCP env is missing {key}")
+        if key not in (codex.get("env") or {}):
+            problems.append(f"{name}: Codex MCP env is missing {key}")
+
+    identity_check = item.get("identity_check")
+    if identity_check:
+        proc = subprocess.run(
+            identity_check,
+            shell=True,
+            cwd=str(base),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout).strip()
+            problems.append(f"{name}: identity check failed: {detail or identity_check}")
     return problems
 
 
@@ -340,6 +415,8 @@ def counterpart_pairs_for_repo(config: dict, base: Path, repo: Path) -> dict[Pat
     global_cfg = config.get("global", {})
     for item in global_cfg.get("file_pairs", []) + global_cfg.get("registration_pairs", []):
         add_exact_pair(pairs, expand_path(item["claude"], base), expand_path(item["codex"], base))
+    for item in global_cfg.get("mcp_servers", []):
+        add_exact_pair(pairs, expand_path(item["claude_config"], base), expand_path(item["codex_config"], base))
 
     for key in ("skill_roots", "hook_roots"):
         for item in global_cfg.get(key, []):
@@ -363,6 +440,8 @@ def counterpart_pairs_for_repo(config: dict, base: Path, repo: Path) -> dict[Pat
                 add_exact_pair(pairs, path, counterpart)
     for item in local_cfg.get("registration_pairs", []):
         add_exact_pair(pairs, repo / item["claude"], repo / item["codex"])
+    for item in local_cfg.get("mcp_servers", []):
+        add_exact_pair(pairs, repo / item["claude_config"], repo / item["codex_config"])
     for key in ("skill_roots", "hook_roots"):
         for item in local_cfg.get(key, []):
             left = (repo / item["claude"]).resolve()
